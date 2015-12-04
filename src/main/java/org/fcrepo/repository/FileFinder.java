@@ -19,9 +19,10 @@ package org.fcrepo.repository;
 import static java.nio.file.FileVisitResult.CONTINUE;
 import static org.slf4j.LoggerFactory.getLogger;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.SequenceInputStream;
 import java.nio.charset.Charset;
 import java.nio.file.FileVisitResult;
@@ -31,7 +32,7 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 
-import org.apache.http.entity.FileEntity;
+import org.apache.commons.io.FileUtils;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.entity.StringEntity;
 import org.slf4j.Logger;
@@ -51,15 +52,15 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
   private final ResourcePutter putter;
 
-  private final FileInputStream prefixStream;
+  private final ByteArrayInputStream prefixStream;
 
   private static StringEntity emptyEntity = new StringEntity("", Charset.forName("UTF-8"));
 
   public FileFinder(final Path root, final ResourcePutter putter, final String prefixFileLocation)
-      throws FileNotFoundException {
+      throws IOException {
     this.root = root;
     this.putter = putter;
-    this.prefixStream = new FileInputStream(new File(prefixFileLocation));
+    this.prefixStream = new ByteArrayInputStream(FileUtils.readFileToByteArray(new File(prefixFileLocation)));
   }
 
   /**
@@ -67,11 +68,11 @@ public class FileFinder extends SimpleFileVisitor<Path> {
    * request to a URI constructed by removing the ".ttl" extension from the filename. So, for example, a file named
    * "collection/23/data.ttl" is uploaded to the relative URI "collection/23/data".
    * 
-   * @throws FileNotFoundException
+   * @throws IOException
    */
   @Override
   public FileVisitResult visitFile(final Path file,
-      final BasicFileAttributes attrs) throws FileNotFoundException {
+      final BasicFileAttributes attrs) throws IOException {
 
     final String filename = file.getFileName().toString();
 
@@ -80,7 +81,9 @@ public class FileFinder extends SimpleFileVisitor<Path> {
       final String uriRef = root.relativize(file).toString().replaceAll("\\.ttl$", "");
       LOGGER.info("Creating {} from {}", uriRef, filename);
       final FileInputStream fileStream = new FileInputStream(file.toFile());
+      prefixStream.reset();
       putter.put(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)));
+      fileStream.close();
     }
 
     return CONTINUE;
@@ -89,10 +92,12 @@ public class FileFinder extends SimpleFileVisitor<Path> {
   /**
    * For each directory, if there is a file named "_.ttl", use that as the Turtle representation of the container
    * corresponding to this directory. Otherwise, use an empty entity to force creation of a container.
+   * 
+   * @throws IOException
    */
   @Override
   public FileVisitResult preVisitDirectory(final Path dir,
-      final BasicFileAttributes attrs) {
+      final BasicFileAttributes attrs) throws IOException {
 
     final String uriRef = root.relativize(dir).toString();
 
@@ -105,8 +110,10 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
     final Path dirFile = Paths.get(dir.toString(), "_.ttl");
     if (Files.exists(dirFile)) {
-
-      putter.put(uriRef, new FileEntity(dirFile.toFile()));
+      prefixStream.reset();
+      final FileInputStream fileStream = new FileInputStream(dirFile.toFile());
+      putter.put(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)));
+      fileStream.close();
     } else {
       putter.put(uriRef, emptyEntity);
     }

@@ -19,7 +19,6 @@ package org.fcrepo.repository;
 import static org.slf4j.LoggerFactory.getLogger;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -39,14 +38,14 @@ public class FedoraResourceImport {
   private static final Logger LOGGER = getLogger(FedoraResourceImport.class);
 
   /**
-     * Upload a directory tree of Turtle files into a repository. The repository base URL passed in using the
-     * fcrepo.url system property (default "http://localhost:8080/rest/"), and the directory to scan for Turtle files
-     * is given in the resources.dir system property (default "." for the current directory).
+   * Upload a directory tree of Turtle files into a repository. The repository base URL passed in using the fcrepo.url
+   * system property (default "http://localhost:8080/rest/"), and the directory to scan for Turtle files is given in the
+   * resources.dir system property (default "." for the current directory).
    * 
    * @param args
-   * @throws FileNotFoundException
+   * @throws IOException
    */
-  public static void main(final String[] args) throws FileNotFoundException {
+  public static void main(final String[] args) throws IOException {
 
     final String defaultPrefixFile = FedoraDatasetImport.class.getResource("/default-prefixes.ttl").getFile();
     final String fcrepoUrl = System.getProperty("fcrepo.url", "http://localhost:8080/rest/");
