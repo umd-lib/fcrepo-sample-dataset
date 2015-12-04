@@ -31,51 +31,69 @@ import org.slf4j.Logger;
 
 /**
  * Uses an HTTP client configured with a repository base URI to PUT resources with a given path and content.
- *
+ * 
  * @author Peter Eichman
  * @since 2015-09-25
  */
 public class ResourcePutter {
 
-    private static final Logger LOGGER = getLogger(ResourcePutter.class);
+  private static final Logger LOGGER = getLogger(ResourcePutter.class);
 
-    private final HttpClient httpClient = HttpClientBuilder.create().setMaxConnPerRoute(MAX_VALUE)
-            .setMaxConnTotal(MAX_VALUE).build();
+  private final HttpClient httpClient = HttpClientBuilder.create().setMaxConnPerRoute(MAX_VALUE)
+      .setMaxConnTotal(MAX_VALUE).build();
 
-    private final URI baseUrl;
+  private final URI baseUrl;
 
-    /**
-     * The base URI is given in baseUrl. It should end with a "/" for relative URI refs to resolve as expected.
-     *
-     * @param baseUrl
-     */
-    public ResourcePutter(final URI baseUrl) {
-        this.baseUrl = baseUrl;
+  private final String authHeader;
+
+  /**
+   * The base URI is given in baseUrl. It should end with a "/" for relative URI refs to resolve as expected.
+   * 
+   * @param baseUrl
+   */
+  public ResourcePutter(final URI baseUrl) {
+    this.baseUrl = baseUrl;
+    this.authHeader = null;
+  }
+
+  /**
+   * The base URI is given in baseUrl. It should end with a "/" for relative URI refs to resolve as expected.
+   * 
+   * @param baseUrl
+   */
+  public ResourcePutter(final URI baseUrl, final String authHeader) {
+    this.baseUrl = baseUrl;
+    this.authHeader = authHeader;
+  }
+
+  /**
+   * Issues a PUT request to a URI constructed from the baseUrl plus the given uriRef with the entity as the content of
+   * that request. The Content-Type header is always forced to text/turtle.
+   * 
+   * @param uriRef
+   *          relative path for the uploaded resource
+   * @param entity
+   *          content of the resource
+   * @return true on success, false on failure
+   */
+  public boolean put(final String uriRef, final HttpEntity entity) {
+    final URI requestURI = baseUrl.resolve(uriRef);
+    final HttpPut put = new HttpPut(requestURI);
+    put.setEntity(entity);
+    put.setHeader("Content-Type", "text/turtle");
+    if (authHeader != null) {
+      put.setHeader("Authorization", authHeader);
     }
-
-    /**
-     * Issues a PUT request to a URI constructed from the baseUrl plus the given uriRef with the entity as the content
-     * of that request. The Content-Type header is always forced to text/turtle.
-     *
-     * @param uriRef relative path for the uploaded resource
-     * @param entity content of the resource
-     * @return true on success, false on failure
-     */
-    public boolean put(final String uriRef, final HttpEntity entity) {
-        final URI requestURI = baseUrl.resolve(uriRef);
-        final HttpPut put = new HttpPut(requestURI);
-        put.setEntity(entity);
-        put.setHeader("Content-Type", "text/turtle");
-        HttpResponse res;
-        try {
-            res = httpClient.execute(put);
-            LOGGER.debug("URL:" + requestURI);
-            LOGGER.debug("Response:" + res.toString());
-            return res.getStatusLine().getStatusCode() == CREATED.getStatusCode();
-        } catch (final Exception e) {
-            LOGGER.warn("Failed to PUT " + requestURI);
-            e.printStackTrace();
-            return false;
-        }
+    HttpResponse res;
+    try {
+      res = httpClient.execute(put);
+      LOGGER.debug("URL:" + requestURI);
+      LOGGER.debug("Response:" + res.toString());
+      return res.getStatusLine().getStatusCode() == CREATED.getStatusCode();
+    } catch (final Exception e) {
+      LOGGER.warn("Failed to PUT " + requestURI);
+      e.printStackTrace();
+      return false;
     }
+  }
 }
