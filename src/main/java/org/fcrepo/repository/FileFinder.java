@@ -19,6 +19,10 @@ package org.fcrepo.repository;
 import static java.nio.file.FileVisitResult.CONTINUE;
 import static org.slf4j.LoggerFactory.getLogger;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.SequenceInputStream;
 import java.nio.charset.Charset;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -28,6 +32,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 
 import org.apache.http.entity.FileEntity;
+import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.entity.StringEntity;
 import org.slf4j.Logger;
 
@@ -46,21 +51,27 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
   private final ResourcePutter putter;
 
+  private final FileInputStream prefixStream;
+
   private static StringEntity emptyEntity = new StringEntity("", Charset.forName("UTF-8"));
 
-  public FileFinder(final Path root, final ResourcePutter putter) {
+  public FileFinder(final Path root, final ResourcePutter putter, final String prefixFileLocation)
+      throws FileNotFoundException {
     this.root = root;
     this.putter = putter;
+    this.prefixStream = new FileInputStream(new File(prefixFileLocation));
   }
 
   /**
-     * For each file with the ".ttl" extension, if it is not also a dotfile or named "_.ttl", send its contents in a
-     * PUT request to a URI constructed by removing the ".ttl" extension from the filename. So, for example, a file
-     * named "collection/23/data.ttl" is uploaded to the relative URI "collection/23/data".
+   * For each file with the ".ttl" extension, if it is not also a dotfile or named "_.ttl", send its contents in a PUT
+   * request to a URI constructed by removing the ".ttl" extension from the filename. So, for example, a file named
+   * "collection/23/data.ttl" is uploaded to the relative URI "collection/23/data".
+   * 
+   * @throws FileNotFoundException
    */
   @Override
   public FileVisitResult visitFile(final Path file,
-      final BasicFileAttributes attrs) {
+      final BasicFileAttributes attrs) throws FileNotFoundException {
 
     final String filename = file.getFileName().toString();
 
@@ -68,7 +79,8 @@ public class FileFinder extends SimpleFileVisitor<Path> {
       // file is not hidden ("dotfile") or the special "_.ttl" that represents the container
       final String uriRef = root.relativize(file).toString().replaceAll("\\.ttl$", "");
       LOGGER.info("Creating {} from {}", uriRef, filename);
-      putter.put(uriRef, new FileEntity(file.toFile()));
+      final FileInputStream fileStream = new FileInputStream(file.toFile());
+      putter.put(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)));
     }
 
     return CONTINUE;
@@ -93,6 +105,7 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
     final Path dirFile = Paths.get(dir.toString(), "_.ttl");
     if (Files.exists(dirFile)) {
+
       putter.put(uriRef, new FileEntity(dirFile.toFile()));
     } else {
       putter.put(uriRef, emptyEntity);

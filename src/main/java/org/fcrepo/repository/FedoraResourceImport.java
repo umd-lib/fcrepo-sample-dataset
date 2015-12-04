@@ -19,6 +19,7 @@ package org.fcrepo.repository;
 import static org.slf4j.LoggerFactory.getLogger;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -43,11 +44,14 @@ public class FedoraResourceImport {
      * is given in the resources.dir system property (default "." for the current directory).
    * 
    * @param args
+   * @throws FileNotFoundException
    */
-  public static void main(final String[] args) {
+  public static void main(final String[] args) throws FileNotFoundException {
 
+    final String defaultPrefixFile = FedoraDatasetImport.class.getResource("/default-prefixes.ttl").getFile();
     final String fcrepoUrl = System.getProperty("fcrepo.url", "http://localhost:8080/rest/");
     final String resourcesDir = System.getProperty("resources.dir", ".");
+    final String resourcesPrefix = System.getProperty("resource.prefix", defaultPrefixFile);
     final String username = System.getProperty("fcrepo.authUser", "");
     final String password = System.getProperty("fcrepo.authPassword", "");
     final ResourcePutter putter;
@@ -56,6 +60,7 @@ public class FedoraResourceImport {
 
     LOGGER.info("fcrepoUrl:" + fcrepoUrl);
     LOGGER.info("resources dir:" + dir.getAbsolutePath());
+    LOGGER.info("Using default prefix file!" + resourcesPrefix);
 
     if (!username.isEmpty() && !password.isEmpty()) {
       final String creds = username + ":" + password;
@@ -68,7 +73,7 @@ public class FedoraResourceImport {
     }
 
     final Path filesRoot = Paths.get(resourcesDir);
-    final FileFinder finder = new FileFinder(filesRoot, putter);
+    final FileFinder finder = new FileFinder(filesRoot, putter, resourcesPrefix);
     try {
       Files.walkFileTree(filesRoot, finder);
     } catch (final IOException e) {
