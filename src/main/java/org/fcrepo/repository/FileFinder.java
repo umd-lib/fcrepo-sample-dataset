@@ -101,11 +101,6 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
     final String uriRef = root.relativize(dir).toString();
 
-    if ("".equals(uriRef)) {
-      // Skip creating container for the resource.dir root
-      return CONTINUE;
-    }
-
     LOGGER.info("Creating container " + uriRef);
 
     final Path dirFile = Paths.get(dir.toString(), "_.ttl");
