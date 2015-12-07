@@ -37,6 +37,10 @@ import org.slf4j.Logger;
 public class FedoraResourceImport {
   private static final Logger LOGGER = getLogger(FedoraResourceImport.class);
 
+  public static final String MODE_TURTLE = "TURTLE";
+
+  public static final String MODE_SPARQL = "SPQRQL";
+
   /**
    * Upload a directory tree of Turtle files into a repository. The repository base URL passed in using the fcrepo.url
    * system property (default "http://localhost:8080/rest/"), and the directory to scan for Turtle files is given in the
@@ -53,7 +57,7 @@ public class FedoraResourceImport {
     final String resourcesPrefix = System.getProperty("resource.prefix", defaultPrefixFile);
     final String username = System.getProperty("fcrepo.authUser", "");
     final String password = System.getProperty("fcrepo.authPassword", "");
-    final ResourcePutter putter;
+    final ResourceLoader loader;
 
     final File dir = new File(resourcesDir);
 
@@ -65,15 +69,17 @@ public class FedoraResourceImport {
       final String creds = username + ":" + password;
       final String encCreds = new String(Base64.encodeBase64(creds.getBytes()));
       final String basic = "Basic " + encCreds;
-      putter = new ResourcePutter(URI.create(fcrepoUrl), basic);
+      loader = new ResourceLoader(URI.create(fcrepoUrl), basic);
       LOGGER.info("Using Authentication!");
     } else {
-      putter = new ResourcePutter(URI.create(fcrepoUrl));
+      loader = new ResourceLoader(URI.create(fcrepoUrl));
     }
 
     final Path filesRoot = Paths.get(resourcesDir);
-    final FileFinder finder = new FileFinder(filesRoot, putter, resourcesPrefix);
+    final FileFinder finder = new FileFinder(filesRoot, loader, resourcesPrefix);
     try {
+      Files.walkFileTree(filesRoot, finder);
+      finder.setFinderMode(MODE_SPARQL);
       Files.walkFileTree(filesRoot, finder);
     } catch (final IOException e) {
       e.printStackTrace();

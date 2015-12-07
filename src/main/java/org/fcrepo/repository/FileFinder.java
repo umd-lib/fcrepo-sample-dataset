@@ -17,6 +17,8 @@
 package org.fcrepo.repository;
 
 import static java.nio.file.FileVisitResult.CONTINUE;
+import static org.fcrepo.repository.FedoraResourceImport.MODE_SPARQL;
+import static org.fcrepo.repository.FedoraResourceImport.MODE_TURTLE;
 import static org.slf4j.LoggerFactory.getLogger;
 
 import java.io.ByteArrayInputStream;
@@ -33,12 +35,14 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.ParseException;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.entity.StringEntity;
 import org.slf4j.Logger;
 
 /**
- * File visitor that looks for Turtle files (.ttl extension) and uploads them to a repository using a ResourcePutter
+ * File visitor that looks for files with specific extensions and uploads them to a repository using a ResourcePutter
  * object.
  * 
  * @author Peter Eichman
@@ -50,23 +54,59 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
   private final Path root;
 
-  private final ResourcePutter putter;
+  private final ResourceLoader resourceLoader;
 
   private final ByteArrayInputStream prefixStream;
 
+  private String finderMode = MODE_TURTLE;
+
+  private String fileType = ".ttl";
+
+  private boolean skipDirsWithoutMetaFile = false;
+
+  private String logPrefix = "Creating";
+
   private static StringEntity emptyEntity = new StringEntity("", Charset.forName("UTF-8"));
 
-  public FileFinder(final Path root, final ResourcePutter putter, final String prefixFileLocation)
+  public FileFinder(final Path root, final ResourceLoader resourceLoader, final String prefixFileLocation)
       throws IOException {
     this.root = root;
-    this.putter = putter;
+    this.resourceLoader = resourceLoader;
     this.prefixStream = new ByteArrayInputStream(FileUtils.readFileToByteArray(new File(prefixFileLocation)));
   }
 
+  public void setFileType(final String type) {
+    this.fileType = type;
+  }
+
+  public void skipDirsWithoutMetaFile(final boolean skip) {
+    this.skipDirsWithoutMetaFile = skip;
+  }
+
+  public void setFinderMode(String mode) {
+    if (mode.equals(MODE_TURTLE)) {
+      this.finderMode = MODE_TURTLE;
+      this.fileType = ".ttl";
+      this.skipDirsWithoutMetaFile = false;
+      this.logPrefix = "Creating";
+      return;
+    } else if (mode.equals(MODE_SPARQL)) {
+      this.finderMode = MODE_SPARQL;
+      this.fileType = ".rq";
+      this.skipDirsWithoutMetaFile = true;
+      this.logPrefix = "Patching";
+      return;
+    } else {
+      LOGGER.debug("Unknown finder mode: " + mode);
+      return;
+    }
+  }
+
   /**
-   * For each file with the ".ttl" extension, if it is not also a dotfile or named "_.ttl", send its contents in a PUT
-   * request to a URI constructed by removing the ".ttl" extension from the filename. So, for example, a file named
-   * "collection/23/data.ttl" is uploaded to the relative URI "collection/23/data".
+   * For each file with the .ttl or .rq extension, if it is not also a dotfile or named "_", send its contents in a HTTP
+   * request to a URI constructed by removing the extension from the filename. So, for example, a file named
+   * "collection/23/data.ttl" is uploaded to the relative URI "collection/23/data". PUT method is used for .ttl files
+   * and PATCH method is used for .rq files.
    * 
    * @throws IOException
    */
@@ -76,13 +116,13 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
     final String filename = file.getFileName().toString();
 
-    if (filename.endsWith(".ttl") && !filename.startsWith(".") && !filename.equals("_.ttl")) {
+    if (filename.endsWith(fileType) && !filename.startsWith(".") && !filename.equals("_" + fileType)) {
       // file is not hidden ("dotfile") or the special "_.ttl" that represents the container
-      final String uriRef = root.relativize(file).toString().replaceAll("\\.ttl$", "");
-      LOGGER.info("Creating {} from {}", uriRef, filename);
+      final String uriRef = root.relativize(file).toString().replaceAll("\\" + fileType + "$", "");
+      LOGGER.info("{} {} from {}", logPrefix, uriRef, filename);
       final FileInputStream fileStream = new FileInputStream(file.toFile());
       prefixStream.reset();
-      putter.put(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)));
+      loadResourceWithEntity(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)));
       fileStream.close();
     }
 
@@ -91,7 +131,9 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
   /**
    * For each directory, if there is a file named "_.ttl", use that as the Turtle representation of the container
-   * corresponding to this directory. Otherwise, use an empty entity to force creation of a container.
+   * corresponding to this directory. Otherwise, use an empty entity to force creation of a container unless
+   * skipDirsWithoutMetaFile is set to true. If there is a file name "_.rq", use that as the SPARQL query to update the
+   * container.
    * 
    * @throws IOException
    */
@@ -101,18 +143,26 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
     final String uriRef = root.relativize(dir).toString();
 
-    LOGGER.info("Creating container " + uriRef);
-
-    final Path dirFile = Paths.get(dir.toString(), "_.ttl");
+    final Path dirFile = Paths.get(dir.toString(), "_" + fileType);
     if (Files.exists(dirFile)) {
+      LOGGER.info("{} container {}", logPrefix, uriRef);
       prefixStream.reset();
       final FileInputStream fileStream = new FileInputStream(dirFile.toFile());
-      putter.put(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)));
+      loadResourceWithEntity(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)));
       fileStream.close();
-    } else {
-      putter.put(uriRef, emptyEntity);
+    } else if (!skipDirsWithoutMetaFile) {
+      LOGGER.info("{} container {}", logPrefix, uriRef);
+      loadResourceWithEntity(uriRef, emptyEntity);
     }
     return CONTINUE;
+  }
+
+  private void loadResourceWithEntity(String uriRef, HttpEntity entity) throws ParseException, IOException {
+    if (finderMode.equals(MODE_TURTLE)) {
+      resourceLoader.put(uriRef, entity);
+    } else {
+      resourceLoader.patch(uriRef, entity);
+    }
   }
 
 }
