@@ -16,10 +16,10 @@ For a secure repo, the authentication information can be set using the following
 To load your own dataset, convert it to jcr/xml format and place the data files under src/main/resources/data directory, then run ```mvn -Dfcrepo.url=&lt;repo.url&gt; exec:java``` to load it to the repository.
 
 ### Resource Import Profile
-The resource import profile supports loading turtle files and performing SPARQL updates on the repository. The ```resourceimport``` maven profile loads the data (only ttl and rq files) at the ```src/main/resources/data``` location by default. This can be overridden by specifying a location using ```resources.dir``` as depicted in the example below:
+The resource import profile supports loading turtle files and performing SPARQL updates on the repository. The ```resourceimport``` maven profile loads the data (only ttl and ru files) at the ```src/main/resources/data``` location by default. This can be overridden by specifying a location using ```resources.dir``` as depicted in the example below:
 
 ```
 mvn exec:java -P resourceimport -Dfcrepo.url=http://localhost:8080/rest/sample-set -Dfcrepo.authUser=user -Dfcrepo.authPassword=pass -Dresources.dir=/path/to/data
 ```
 
-The above command will load data from location ```/path/to/data``` to ```http://localhost:8080/rest/sample-set``` creating containers for the subdirectories and resources for the .ttl files. The sparql updates in the .rq files will be applied after the containers and resources are created.
+The above command will load data from location ```/path/to/data``` to ```http://localhost:8080/rest/sample-set``` creating containers for the subdirectories and resources for the .ttl files. The sparql updates in the .ru files will be applied after the containers and resources are created.

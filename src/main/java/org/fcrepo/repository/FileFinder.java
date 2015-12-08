@@ -92,7 +92,7 @@ public class FileFinder extends SimpleFileVisitor<Path> {
       return;
     } else if (mode.equals(MODE_SPARQL)) {
       this.finderMode = MODE_SPARQL;
-      this.fileType = ".rq";
+      this.fileType = ".ru";
       this.skipDirsWithoutMetaFile = true;
       this.logPrefix = "Patching";
       return;
@@ -103,10 +103,10 @@ public class FileFinder extends SimpleFileVisitor<Path> {
   }
 
   /**
-   * For each file with the .ttl or .rq extension, if it is not also a dotfile or named "_", send its contents in a HTTP
+   * For each file with the .ttl or .ru extension, if it is not also a dotfile or named "_", send its contents in a HTTP
    * request to a URI constructed by removing the extension from the filename. So, for example, a file named
    * "collection/23/data.ttl" is uploaded to the relative URI "collection/23/data". PUT method is used for .ttl files
-   * and PATCH method is used for .rq files.
+   * and PATCH method is used for .ru files.
    * 
    * @throws IOException
    */
@@ -132,7 +132,7 @@ public class FileFinder extends SimpleFileVisitor<Path> {
   /**
    * For each directory, if there is a file named "_.ttl", use that as the Turtle representation of the container
    * corresponding to this directory. Otherwise, use an empty entity to force creation of a container unless
-   * skipDirsWithoutMetaFile is set to true. If there is a file name "_.rq", use that as the SPARQL query to update the
+   * skipDirsWithoutMetaFile is set to true. If there is a file name "_.ru", use that as the SPARQL query to update the
    * container.
    * 
    * @throws IOException
