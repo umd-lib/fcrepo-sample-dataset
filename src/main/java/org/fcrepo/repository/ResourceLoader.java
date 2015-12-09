@@ -18,6 +18,7 @@ package org.fcrepo.repository;
 
 import static java.lang.Integer.MAX_VALUE;
 import static javax.ws.rs.core.Response.Status.CREATED;
+import static javax.ws.rs.core.Response.Status.NO_CONTENT;
 import static org.slf4j.LoggerFactory.getLogger;
 
 import java.io.IOException;
@@ -86,9 +87,28 @@ public class ResourceLoader {
    * @throws ParseException
    */
   public boolean put(final String uriRef, final HttpEntity entity) throws ParseException, IOException {
+    return put(uriRef, entity, "text/turtle");
+  }
+
+  /**
+   * Issues a PUT request to a URI constructed from the baseUrl plus the given uriRef with the entity as the content of
+   * that request. The provided mimeType is used as the Content-Type header.
+   * 
+   * @param uriRef
+   *          relative path for the uploaded resource
+   * @param entity
+   *          content of the resource
+   * @param contentType
+   *          MIME type of the resource
+   * @return true on success, false on failure
+   * @throws IOException
+   * @throws ParseException
+   */
+  public boolean put(final String uriRef, final HttpEntity entity, final String contentType) throws ParseException,
+      IOException {
     final HttpPut put = new HttpPut(baseUrl.resolve(uriRef));
-    put.setHeader("Content-Type", "text/turtle");
-    return action(put, uriRef, entity);
+    put.setHeader("Content-Type", contentType);
+    return action(put, uriRef, entity, CREATED.getStatusCode());
   }
 
   /**
@@ -104,12 +124,15 @@ public class ResourceLoader {
    * @throws ParseException
    */
   public boolean patch(final String uriRef, final HttpEntity entity) throws ParseException, IOException {
-    //final HttpPatch patch = new HttpPatch(baseUrl.resolve(uriRef));
+    // final HttpPatch patch = new HttpPatch(baseUrl.resolve(uriRef));
     final HttpPost postAsPatch = new HttpPost(baseUrl.resolve(uriRef)) {
-      @Override public String getMethod() { return "PATCH"; }
+      @Override
+      public String getMethod() {
+        return "PATCH";
+      }
     };
     postAsPatch.setHeader("Content-Type", "application/sparql-update");
-    return action(postAsPatch, uriRef, entity);
+    return action(postAsPatch, uriRef, entity, NO_CONTENT.getStatusCode());
   }
 
   /**
@@ -123,7 +146,8 @@ public class ResourceLoader {
    * @throws IOException
    * @throws ParseException
    */
-  public boolean action(final HttpEntityEnclosingRequest method, final String uriRef, final HttpEntity entity)
+  public boolean action(final HttpEntityEnclosingRequest method, final String uriRef, final HttpEntity entity,
+      final int expectedCode)
       throws ParseException, IOException {
     final URI requestURI = baseUrl.resolve(uriRef);
 

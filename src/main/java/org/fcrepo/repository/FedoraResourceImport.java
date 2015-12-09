@@ -37,9 +37,9 @@ import org.slf4j.Logger;
 public class FedoraResourceImport {
   private static final Logger LOGGER = getLogger(FedoraResourceImport.class);
 
-  public static final String MODE_TURTLE = "TURTLE";
+  public static final String MODE_CREATE = "CREATE";
 
-  public static final String MODE_SPARQL = "SPQRQL";
+  public static final String MODE_UPDATE = "UPDATE";
 
   /**
    * Upload a directory tree of Turtle files into a repository. The repository base URL passed in using the fcrepo.url
@@ -79,7 +79,7 @@ public class FedoraResourceImport {
     final FileFinder finder = new FileFinder(filesRoot, loader, resourcesPrefix);
     try {
       Files.walkFileTree(filesRoot, finder);
-      finder.setFinderMode(MODE_SPARQL);
+      finder.setFinderMode(MODE_UPDATE);
       Files.walkFileTree(filesRoot, finder);
     } catch (final IOException e) {
       e.printStackTrace();

@@ -17,13 +17,15 @@
 package org.fcrepo.repository;
 
 import static java.nio.file.FileVisitResult.CONTINUE;
-import static org.fcrepo.repository.FedoraResourceImport.MODE_SPARQL;
-import static org.fcrepo.repository.FedoraResourceImport.MODE_TURTLE;
+import static org.fcrepo.repository.FedoraResourceImport.MODE_CREATE;
+import static org.fcrepo.repository.FedoraResourceImport.MODE_UPDATE;
 import static org.slf4j.LoggerFactory.getLogger;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.SequenceInputStream;
 import java.nio.charset.Charset;
@@ -33,6 +35,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+import javax.activation.MimetypesFileTypeMap;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpEntity;
@@ -58,9 +65,11 @@ public class FileFinder extends SimpleFileVisitor<Path> {
 
   private final ByteArrayInputStream prefixStream;
 
-  private String finderMode = MODE_TURTLE;
+  private String finderMode = MODE_CREATE;
 
   private String fileType = ".ttl";
+
+  private static final List<String> allowedBinaryFormats = getAllowedFormatsFromFile();
 
   private boolean skipDirsWithoutMetaFile = false;
 
@@ -75,6 +84,25 @@ public class FileFinder extends SimpleFileVisitor<Path> {
     this.prefixStream = new ByteArrayInputStream(FileUtils.readFileToByteArray(new File(prefixFileLocation)));
   }
 
+  private static List<String> getAllowedFormatsFromFile() {
+    final String fileLocation = FedoraDatasetImport.class.getResource("/allowed-binary-formats").getFile();
+    String line = null;
+    ArrayList<String> formats = new ArrayList<String>();
+    try {
+      BufferedReader br = new BufferedReader(new FileReader(new File(fileLocation)));
+      while ((line = br.readLine()) != null) {
+        formats.add("." + line.trim());
+      }
+      br.close();
+    } catch (Exception e) {
+      LOGGER
+          .warn("Exception while reading allowed-binary-formats file! Defaulting to jpg as the only allowed binary format!");
+      LOGGER.debug("Exception:", e);
+      formats.add(".jpg");
+    }
+    return formats;
+  }
+
   public void setFileType(final String type) {
     this.fileType = type;
   }
@@ -84,14 +112,14 @@ public class FileFinder extends SimpleFileVisitor<Path> {
   }
 
   public void setFinderMode(String mode) {
-    if (mode.equals(MODE_TURTLE)) {
-      this.finderMode = MODE_TURTLE;
+    if (mode.equals(MODE_CREATE)) {
+      this.finderMode = MODE_CREATE;
       this.fileType = ".ttl";
       this.skipDirsWithoutMetaFile = false;
       this.logPrefix = "Creating";
       return;
-    } else if (mode.equals(MODE_SPARQL)) {
-      this.finderMode = MODE_SPARQL;
+    } else if (mode.equals(MODE_UPDATE)) {
+      this.finderMode = MODE_UPDATE;
       this.fileType = ".ru";
       this.skipDirsWithoutMetaFile = true;
       this.logPrefix = "Patching";
@@ -122,8 +150,16 @@ public class FileFinder extends SimpleFileVisitor<Path> {
       LOGGER.info("{} {} from {}", logPrefix, uriRef, filename);
       final FileInputStream fileStream = new FileInputStream(file.toFile());
       prefixStream.reset();
-      loadResourceWithEntity(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)));
+      loadResourceWithEntity(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)), null);
       fileStream.close();
+    } else if (finderMode.equals(MODE_CREATE)) {
+      final String extension = filename.substring(filename.lastIndexOf("."));
+      if (allowedBinaryFormats.contains(extension) && !filename.startsWith(".") && !filename.equals("_" + extension)) {
+        String uriRef = root.relativize(file).toString().replaceAll("\\" + extension + "$", "");
+        LOGGER.info("{} {} from {}", logPrefix, uriRef, filename);
+        final String mimeType = new MimetypesFileTypeMap().getContentType(extension);
+        loadResourceWithEntity(uriRef, new InputStreamEntity(new FileInputStream(file.toFile())), mimeType);
+      }
     }
 
     return CONTINUE;
@@ -148,18 +184,41 @@ public class FileFinder extends SimpleFileVisitor<Path> {
       LOGGER.info("{} container {}", logPrefix, uriRef);
       prefixStream.reset();
       final FileInputStream fileStream = new FileInputStream(dirFile.toFile());
-      loadResourceWithEntity(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)));
+      loadResourceWithEntity(uriRef, new InputStreamEntity(new SequenceInputStream(prefixStream, fileStream)), null);
       fileStream.close();
-    } else if (!skipDirsWithoutMetaFile) {
-      LOGGER.info("{} container {}", logPrefix, uriRef);
-      loadResourceWithEntity(uriRef, emptyEntity);
+    } else if (finderMode.equals(MODE_CREATE)) {
+      final Path dirBinaryFile = getAllowedBinaryFile(dir);
+      if (dirBinaryFile != null) {
+        LOGGER.info("{} binary {}", logPrefix, uriRef);
+        final String mimeType = new MimetypesFileTypeMap().getContentType(dirBinaryFile.toString());
+        loadResourceWithEntity(uriRef, new InputStreamEntity(new FileInputStream(dirBinaryFile.toFile())), mimeType);
+      } else if (!skipDirsWithoutMetaFile) {
+        LOGGER.info("{} container {}", logPrefix, uriRef);
+        loadResourceWithEntity(uriRef, emptyEntity, null);
+      }
     }
     return CONTINUE;
   }
 
-  private void loadResourceWithEntity(String uriRef, HttpEntity entity) throws ParseException, IOException {
-    if (finderMode.equals(MODE_TURTLE)) {
-      resourceLoader.put(uriRef, entity);
+  private Path getAllowedBinaryFile(Path dir) {
+    Path dirFile;
+    for (Iterator<String> iter = allowedBinaryFormats.iterator(); iter.hasNext();) {
+      dirFile = Paths.get(dir.toString(), "_" + iter.next());
+      if (Files.exists(dirFile)) {
+        return dirFile;
+      }
+    }
+    return null;
+  }
+
+  private void loadResourceWithEntity(String uriRef, HttpEntity entity, String mimeType) throws ParseException,
+      IOException {
+    if (finderMode.equals(MODE_CREATE)) {
+      if (mimeType != null) {
+        resourceLoader.put(uriRef, entity, mimeType);
+      } else {
+        resourceLoader.put(uriRef, entity);
+      }
     } else {
       resourceLoader.patch(uriRef, entity);
     }
