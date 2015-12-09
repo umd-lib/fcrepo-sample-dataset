@@ -164,7 +164,11 @@ public class ResourceLoader {
       res = httpClient.execute((HttpUriRequest) method);
       LOGGER.debug("URL:" + requestURI);
       LOGGER.debug("Response:" + res.toString());
-      return res.getStatusLine().getStatusCode() == CREATED.getStatusCode();
+      if (res.getStatusLine().getStatusCode() != expectedCode) {
+        LOGGER.warn("Request failed! Expexted {}, got {}!", expectedCode, res.getStatusLine().getStatusCode());
+        return false;
+      }
+      return true;
     } catch (final Exception e) {
       LOGGER.warn("Request failed: " + requestURI);
       e.printStackTrace();
