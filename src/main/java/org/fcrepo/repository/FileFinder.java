@@ -192,7 +192,7 @@ public class FileFinder extends SimpleFileVisitor<Path> {
         LOGGER.info("{} binary {}", logPrefix, uriRef);
         final String mimeType = new MimetypesFileTypeMap().getContentType(dirBinaryFile.toString());
         loadResourceWithEntity(uriRef, new InputStreamEntity(new FileInputStream(dirBinaryFile.toFile())), mimeType);
-      } else if (!skipDirsWithoutMetaFile) {
+      } else if (!(skipDirsWithoutMetaFile || isPairTreeCompatibleName(dir))) {
         LOGGER.info("{} container {}", logPrefix, uriRef);
         loadResourceWithEntity(uriRef, emptyEntity, null);
       }
@@ -222,6 +222,10 @@ public class FileFinder extends SimpleFileVisitor<Path> {
     } else {
       resourceLoader.patch(uriRef, entity);
     }
+  }
+
+  private boolean isPairTreeCompatibleName(Path path) {
+    return path.getFileName().toString().length() == 2;
   }
 
 }
